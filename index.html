@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      // Polyfill fix for libraries trying to override window.fetch
+      if (typeof window !== 'undefined') {
+        const originalFetch = window.fetch;
+        try {
+          Object.defineProperty(window, 'fetch', {
+            configurable: true,
+            enumerable: true,
+            get() { return originalFetch; },
+            set(value) { 
+              Object.defineProperty(window, 'fetch', {
+                value: value,
+                writable: true,
+                configurable: true,
+                enumerable: true
+              });
+            }
+          });
+        } catch(e) {}
+      }
+    </script>
+
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Google AI Studio App</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  
+  
+    
+    <script>
+      window.addEventListener('unhandledrejection', function(event) {
+        if (event.reason) {
+          const msg = event.reason.message || event.reason;
+          if (typeof msg === 'string' && msg.includes('aborted')) {
+            event.preventDefault();
+            return;
+          }
+          if (event.reason.name === 'AbortError') {
+            event.preventDefault();
+            return;
+          }
+          if (event.reason.code === 'auth/popup-closed-by-user') {
+            event.preventDefault();
+            return;
+          }
+        }
+      });
+    </script>
+
+
+  </body>
+</html>
+

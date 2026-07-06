@@ -1,0 +1,6 @@
+{
+  "name": "Agenda Pro",
+  "description": "Agenda eletrônica com gestor de projetos integrado, suporte a prazos, prioridades, sincronização em tempo real, modo offline e integrações com Google Calendar e Drive.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
