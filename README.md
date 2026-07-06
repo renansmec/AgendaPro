@@ -1,1 +1,1 @@
-# AgendaPro
+AgendaPro é uma aplicação web para gerenciamento de projetos e tarefas com integração nativa ao Google Calendar. Ela permite organizar projetos, criar tarefas, utilizar modelos reutilizáveis e sincronizar automaticamente prazos com a agenda do Google, centralizando o planejamento e aumentando a produtividade.
