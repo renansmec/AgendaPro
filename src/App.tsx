@@ -30,6 +30,7 @@ export default function App() {
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
   const [pendingInvites, setPendingInvites] = useState<WorkspaceInvite[]>([]);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -66,6 +67,7 @@ export default function App() {
     setWorkspaceLoading(true);
     
     const loadWorkspaces = async () => {
+      setWorkspaceError(null);
       try {
         
             console.log("Starting loadWorkspaces");
@@ -88,8 +90,9 @@ export default function App() {
               setCurrentWorkspaceId(w[0].id);
             }
           
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error loading workspaces:", err);
+        setWorkspaceError(err.message || JSON.stringify(err));
       } finally {
         setWorkspaceLoading(false);
       }
@@ -335,6 +338,12 @@ export default function App() {
             <div className="flex flex-col h-full w-full items-center justify-center gap-4 text-slate-500">
               <FolderKanban className="w-12 h-12 opacity-20" />
               <p>Houve um problema ao carregar seu ambiente de trabalho.</p>
+              {workspaceError && (
+                <div className="bg-red-50 text-red-600 p-4 rounded max-w-md text-center text-xs border border-red-100">
+                  <p className="font-bold mb-1">Detalhes do erro:</p>
+                  <p className="break-words">{workspaceError}</p>
+                </div>
+              )}
               <button onClick={() => window.location.reload()} className="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-medium hover:bg-indigo-700">Tentar Novamente</button>
             </div>
           ) : (
