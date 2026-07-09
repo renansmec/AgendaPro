@@ -1,9 +1,9 @@
 import { createClient, User } from '@supabase/supabase-js';
 
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
-const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://khmovwmazpqlrawjauyo.supabase.co";
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtobW92d21henBxbHJhd2phdXlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NTYwMjAsImV4cCI6MjA5OTEzMjAyMH0.FhOouoUHHglulI0WsQST4hgltsPRXoTKMnaSr2A-4sM";
 
-export const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseAnonKey || 'placeholder');
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 let cachedAccessToken: string | null = null;
 
@@ -42,8 +42,6 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
   });
   if (error) throw error;
-  // Supabase redirects by default, so we might not reach here immediately
-  // But to satisfy types:
   return null;
 };
 
