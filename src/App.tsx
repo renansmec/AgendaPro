@@ -5,11 +5,11 @@
 
 import { CheckCircle2, LogOut, Copy, Menu, X, LayoutDashboard, FolderKanban, ListTodo, CalendarDays, Users } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
-import { initAuth, googleSignIn, logout } from './lib/firebase';
+import { initAuth, googleSignIn, logout } from './lib/supabase';
 import { subscribeToProjects, subscribeToTasks, subscribeToProjectTemplates, getWorkspacesForUser, createWorkspace, getPendingInvitesForEmail, acceptInvite } from './lib/api';
 import { Workspace, WorkspaceInvite } from './types';
 import { Workspaces } from './components/Workspaces';
-import { User } from 'firebase/auth';
+import { User } from '@supabase/supabase-js';
 import { Dashboard } from './components/Dashboard';
 import { Projects } from './components/Projects';
 import { Tasks } from './components/Tasks';
@@ -33,17 +33,31 @@ export default function App() {
 
 
   useEffect(() => {
+    let isMounted = true;
+    // Fallback timeout in case auth fails silently
+    const fallbackTimeout = setTimeout(() => {
+      if (isMounted) setLoading(false);
+    }, 3000);
+
     const unsubscribe = initAuth(
       (u) => {
+        if (!isMounted) return;
         setUser(u);
-        if (!u) setLoading(false);
+        setLoading(false);
+        clearTimeout(fallbackTimeout);
       },
       () => {
+        if (!isMounted) return;
         setUser(null);
         setLoading(false);
+        clearTimeout(fallbackTimeout);
       }
     );
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+      clearTimeout(fallbackTimeout);
+    };
   }, []);
 
   // 1. Fetch workspaces and invites first
@@ -52,22 +66,33 @@ export default function App() {
     setWorkspaceLoading(true);
     
     const loadWorkspaces = async () => {
-      if (user.email) {
-        const invites = await getPendingInvitesForEmail(user.email);
-        setPendingInvites(invites);
+      try {
+        
+            console.log("Starting loadWorkspaces");
+            if (user.email) {
+              console.log("Fetching invites");
+              const invites = await getPendingInvitesForEmail(user.email);
+              setPendingInvites(invites);
+            }
+            
+            console.log("Fetching workspaces");
+            let w = await getWorkspacesForUser(user.id);
+            console.log("Fetched workspaces", w);
+            if (w.length === 0) {
+              // Create default workspace
+              const defaultW = await createWorkspace("Meu Ambiente", user.id, user.email || "");
+              w = [defaultW];
+            }
+            setWorkspaces(w);
+            if (!currentWorkspaceId || !w.find(wx => wx.id === currentWorkspaceId)) {
+              setCurrentWorkspaceId(w[0].id);
+            }
+          
+      } catch (err) {
+        console.error("Error loading workspaces:", err);
+      } finally {
+        setWorkspaceLoading(false);
       }
-      
-      let w = await getWorkspacesForUser(user.uid);
-      if (w.length === 0) {
-        // Create default workspace
-        const defaultW = await createWorkspace("Meu Ambiente", user.uid, user.email || "");
-        w = [defaultW];
-      }
-      setWorkspaces(w);
-      if (!currentWorkspaceId || !w.find(wx => wx.id === currentWorkspaceId)) {
-        setCurrentWorkspaceId(w[0].id);
-      }
-      setWorkspaceLoading(false);
     };
     
     loadWorkspaces();
@@ -75,7 +100,14 @@ export default function App() {
 
   // 2. Fetch data based on current workspace
   useEffect(() => {
-    if (!user || !currentWorkspaceId || workspaceLoading) return;
+    if (!user || workspaceLoading) return;
+    
+    if (!currentWorkspaceId) {
+      setLoading(false);
+      setDataLoading(false);
+      return;
+    }
+
     setDataLoading(true);
     let tasksLoaded = false;
     let projectsLoaded = false;
@@ -101,7 +133,15 @@ export default function App() {
       templatesLoaded = true;
       checkLoading();
     });
+    
+    // Safety timeout in case subscriptions fail silently or are rejected by rules
+    const timeout = setTimeout(() => {
+      setDataLoading(false);
+      setLoading(false);
+    }, 3000);
+
     return () => {
+      clearTimeout(timeout);
       unsubTasks();
       unsubProjects();
       unsubTemplates();
@@ -110,9 +150,9 @@ export default function App() {
 
   const handleAcceptInvite = async (invite: WorkspaceInvite) => {
     if (!user) return;
-    await acceptInvite(invite, user.uid);
+    await acceptInvite(invite, user.id);
     setPendingInvites(prev => prev.filter(i => i.id !== invite.id));
-    const w = await getWorkspacesForUser(user.uid);
+    const w = await getWorkspacesForUser(user.id);
     setWorkspaces(w);
     setCurrentWorkspaceId(invite.workspaceId);
   };
@@ -287,9 +327,15 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-auto p-4 relative">
-          {dataLoading ? (
+          {dataLoading || workspaceLoading ? (
             <div className="flex h-full w-full items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            </div>
+          ) : !currentWorkspaceId ? (
+            <div className="flex flex-col h-full w-full items-center justify-center gap-4 text-slate-500">
+              <FolderKanban className="w-12 h-12 opacity-20" />
+              <p>Houve um problema ao carregar seu ambiente de trabalho.</p>
+              <button onClick={() => window.location.reload()} className="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-medium hover:bg-indigo-700">Tentar Novamente</button>
             </div>
           ) : (
             <>
@@ -306,7 +352,7 @@ export default function App() {
                 <Templates workspaceId={currentWorkspaceId!} templates={templates} />
               </div>
             <div className={activeTab === 'workspaces' ? 'block h-full' : 'hidden'}>
-                {currentWorkspaceId && <Workspaces currentWorkspaceId={currentWorkspaceId} userEmail={user.email!} onWorkspaceChange={setCurrentWorkspaceId} workspaces={workspaces} refreshWorkspaces={async () => { const w = await getWorkspacesForUser(user.uid); setWorkspaces(w); }} />}
+                {currentWorkspaceId && <Workspaces currentWorkspaceId={currentWorkspaceId} userEmail={user.email!} onWorkspaceChange={setCurrentWorkspaceId} workspaces={workspaces} refreshWorkspaces={async () => { const w = await getWorkspacesForUser(user.id); setWorkspaces(w); }} />}
               </div>
             </>
           )}

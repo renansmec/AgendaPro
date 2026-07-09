@@ -1,4 +1,4 @@
-import { getAccessToken, googleSignIn } from '../lib/firebase';
+import { getAccessToken, googleSignIn } from '../lib/supabase';
 import { syncProjectToCalendar, syncTaskToCalendar } from '../lib/workspace';
 import React, { useState } from 'react';
 import { Task, Project } from '../types';

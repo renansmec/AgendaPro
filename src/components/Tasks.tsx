@@ -3,7 +3,7 @@ import { createTask, updateTask, deleteTask } from '../lib/api';
 import { Task, Project } from '../types';
 import { Trash2, Edit2, Check, X, Lock, PlusCircle } from 'lucide-react';
 import { syncTaskToCalendar, deleteEventFromCalendar } from '../lib/workspace';
-import { getAccessToken, googleSignIn } from '../lib/firebase';
+import { getAccessToken, googleSignIn } from '../lib/supabase';
 
 interface TasksProps {
   workspaceId: string;

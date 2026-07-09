@@ -1,198 +1,171 @@
-import { collection, doc, setDoc, getDocs, query, where, updateDoc, deleteDoc, serverTimestamp, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from './firebase';
+import { supabase } from './supabase';
 import { Task, Project, ProjectTemplate, Workspace, WorkspaceMember, WorkspaceInvite, Role } from '../types';
 
+// Helper for unique IDs (if Supabase doesn't auto-generate or you want client-side IDs)
+// Since Supabase usually uses uuid, we can generate them or just let DB generate if we configure it so.
+// Let's assume we let DB generate by omitting ID for inserts, wait, the types have `id: string`.
+// If we omit it and let DB return it, the types say `id` is required.
+// Actually, `insert()` in Supabase can return the generated row.
+// Our types expect `id` to be string, we can use `uuid` in DB.
+
 export const subscribeToProjectTemplates = (workspaceId: string, callback: (templates: ProjectTemplate[]) => void) => {
-  const q = query(collection(db, 'projectTemplates'), where('workspaceId', '==', workspaceId));
-  return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProjectTemplate)));
-  }, (error) => console.warn('Error in subscribeToProjectTemplates:', error));
+  supabase.from('projectTemplates').select('*').eq('workspaceId', workspaceId).then(({data}) => {
+    if (data) callback(data as ProjectTemplate[]);
+  });
+  const channel = supabase.channel(`projectTemplates_${workspaceId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'projectTemplates', filter: `workspaceId=eq.${workspaceId}` }, () => {
+       supabase.from('projectTemplates').select('*').eq('workspaceId', workspaceId).then(({data}) => {
+        if (data) callback(data as ProjectTemplate[]);
+      });
+    }).subscribe();
+  return () => { supabase.removeChannel(channel); };
 };
 
 export const createProjectTemplate = async (template: Omit<ProjectTemplate, 'id' | 'createdAt'>): Promise<ProjectTemplate> => {
-  const newRef = doc(collection(db, 'projectTemplates'));
-  const newTemplate = {
-    ...template,
-    id: newRef.id,
-    createdAt: new Date().toISOString()
-  };
-  setDoc(newRef, newTemplate).catch(err => { if (err && err.message && (err.message.includes('aborted') || err.message.includes('popup'))) { console.warn('User aborted'); } else { console.error(err); } });
-  return newTemplate as ProjectTemplate;
+  const { data, error } = await supabase.from('projectTemplates').insert([{...template, createdAt: new Date().toISOString()}]).select().single();
+  if (error) throw error;
+  return data as ProjectTemplate;
 };
 
 export const updateProjectTemplate = async (templateId: string, updates: Partial<ProjectTemplate>): Promise<void> => {
-  updateDoc(doc(db, 'projectTemplates', templateId), updates).catch(err => { if (err && err.message && (err.message.includes('aborted') || err.message.includes('popup'))) { console.warn('User aborted'); } else { console.error(err); } });
+  await supabase.from('projectTemplates').update(updates).eq('id', templateId);
 };
 
 export const deleteProjectTemplate = async (templateId: string): Promise<void> => {
-  deleteDoc(doc(db, 'projectTemplates', templateId)).catch(err => { if (err && err.message && (err.message.includes('aborted') || err.message.includes('popup'))) { console.warn('User aborted'); } else { console.error(err); } });
+  await supabase.from('projectTemplates').delete().eq('id', templateId);
 };
 
 export const subscribeToProjects = (workspaceId: string, callback: (projects: Project[]) => void) => {
-  const q = query(collection(db, 'projects'), where('workspaceId', '==', workspaceId));
-  return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Project)));
-  }, (error) => console.warn('Error in subscribeToProjects:', error));
+  supabase.from('projects').select('*').eq('workspaceId', workspaceId).then(({data}) => {
+    if (data) callback(data as Project[]);
+  });
+  const channel = supabase.channel(`projects_${workspaceId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'projects', filter: `workspaceId=eq.${workspaceId}` }, () => {
+       supabase.from('projects').select('*').eq('workspaceId', workspaceId).then(({data}) => {
+        if (data) callback(data as Project[]);
+      });
+    }).subscribe();
+  return () => { supabase.removeChannel(channel); };
 };
 
 export const subscribeToTasks = (workspaceId: string, callback: (tasks: Task[]) => void) => {
-  const q = query(collection(db, 'tasks'), where('workspaceId', '==', workspaceId));
-  return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task)));
-  }, (error) => console.warn('Error in subscribeToTasks:', error));
+  supabase.from('tasks').select('*').eq('workspaceId', workspaceId).then(({data}) => {
+    if (data) callback(data as Task[]);
+  });
+  const channel = supabase.channel(`tasks_${workspaceId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `workspaceId=eq.${workspaceId}` }, () => {
+       supabase.from('tasks').select('*').eq('workspaceId', workspaceId).then(({data}) => {
+        if (data) callback(data as Task[]);
+      });
+    }).subscribe();
+  return () => { supabase.removeChannel(channel); };
 };
 
 export const getProjects = async (workspaceId: string): Promise<Project[]> => {
-  const q = query(collection(db, 'projects'), where('workspaceId', '==', workspaceId));
-  const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Project));
+  const { data } = await supabase.from('projects').select('*').eq('workspaceId', workspaceId);
+  return (data || []) as Project[];
 };
 
 export const createProject = async (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<Project> => {
-  const newRef = doc(collection(db, 'projects'));
-  const newProject = {
+  const { data, error } = await supabase.from('projects').insert([{
     ...project,
-    id: newRef.id,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
-  };
-  setDoc(newRef, newProject).catch(err => { if (err && err.message && (err.message.includes('aborted') || err.message.includes('popup'))) { console.warn('User aborted'); } else { console.error(err); } });
-  return newProject as Project;
+  }]).select().single();
+  if (error) throw error;
+  return data as Project;
 };
 
 export const updateProject = async (projectId: string, updates: Partial<Project>): Promise<void> => {
-  const projectRef = doc(db, 'projects', projectId);
-  updateDoc(projectRef, {
-    ...updates,
-    updatedAt: new Date().toISOString()
-  }).catch(err => { if (err && err.message && (err.message.includes('aborted') || err.message.includes('popup'))) { console.warn('User aborted'); } else { console.error(err); } });
+  await supabase.from('projects').update({ ...updates, updatedAt: new Date().toISOString() }).eq('id', projectId);
 };
 
 export const deleteProject = async (projectId: string, workspaceId: string) => {
-  const tasksQuery = query(collection(db, 'tasks'), where('workspaceId', '==', workspaceId));
-  const tasksSnapshot = await getDocs(tasksQuery);
-  const deletePromises = tasksSnapshot.docs
-    .filter(doc => doc.data().projectId === projectId)
-    .map(doc => deleteDoc(doc.ref));
-  Promise.all([...deletePromises, deleteDoc(doc(db, 'projects', projectId))]).catch(err => { if (err && err.message && (err.message.includes('aborted') || err.message.includes('popup'))) { console.warn('User aborted'); } else { console.error(err); } });
+  await supabase.from('tasks').delete().eq('projectId', projectId);
+  await supabase.from('projects').delete().eq('id', projectId);
 };
 
 export const getTasks = async (workspaceId: string): Promise<Task[]> => {
-  const q = query(collection(db, 'tasks'), where('workspaceId', '==', workspaceId));
-  const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+  const { data } = await supabase.from('tasks').select('*').eq('workspaceId', workspaceId);
+  return (data || []) as Task[];
 };
 
 export const createTask = async (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<Task> => {
-  const newRef = doc(collection(db, 'tasks'));
-  const newTask = {
+  const { data, error } = await supabase.from('tasks').insert([{
     ...task,
-    id: newRef.id,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
-  };
-  setDoc(newRef, newTask).catch(err => { if (err && err.message && (err.message.includes('aborted') || err.message.includes('popup'))) { console.warn('User aborted'); } else { console.error(err); } });
-  return newTask as Task;
+  }]).select().single();
+  if (error) throw error;
+  return data as Task;
 };
 
 export const updateTask = async (taskId: string, updates: Partial<Task>): Promise<void> => {
-  const taskRef = doc(db, 'tasks', taskId);
-  updateDoc(taskRef, {
-    ...updates,
-    updatedAt: new Date().toISOString()
-  }).catch(err => { if (err && err.message && (err.message.includes('aborted') || err.message.includes('popup'))) { console.warn('User aborted'); } else { console.error(err); } });
+  await supabase.from('tasks').update({ ...updates, updatedAt: new Date().toISOString() }).eq('id', taskId);
 };
 
 export const deleteTask = async (taskId: string): Promise<void> => {
-  deleteDoc(doc(db, 'tasks', taskId)).catch(err => { if (err && err.message && (err.message.includes('aborted') || err.message.includes('popup'))) { console.warn('User aborted'); } else { console.error(err); } });
+  await supabase.from('tasks').delete().eq('id', taskId);
 };
 
-
-
 export const createWorkspace = async (name: string, ownerId: string, ownerEmail: string): Promise<Workspace> => {
-  const newRef = doc(collection(db, 'workspaces'));
-  const newWorkspace: Workspace = {
-    id: newRef.id,
-    name,
-    ownerId,
-    createdAt: new Date().toISOString()
-  };
-  await setDoc(newRef, newWorkspace);
-  
-  const memberRef = doc(db, 'workspaceMembers', `${newWorkspace.id}_${ownerId}`);
-  const newMember: WorkspaceMember = {
-    id: memberRef.id,
+  const { data: newWorkspace, error: err1 } = await supabase.from('workspaces').insert([{
+    name, ownerId, createdAt: new Date().toISOString()
+  }]).select().single();
+  if (err1) throw err1;
+
+  const { error: err2 } = await supabase.from('workspaceMembers').insert([{
     workspaceId: newWorkspace.id,
     userId: ownerId,
     email: ownerEmail,
     role: 'admin',
     joinedAt: new Date().toISOString()
-  };
-  await setDoc(memberRef, newMember);
-  return newWorkspace;
+  }]);
+  if (err2) throw err2;
+  return newWorkspace as Workspace;
 };
 
 export const getWorkspacesForUser = async (userId: string): Promise<Workspace[]> => {
-  const memberQuery = query(collection(db, 'workspaceMembers'), where('userId', '==', userId));
-  const memberSnapshot = await getDocs(memberQuery);
-  if (memberSnapshot.empty) return [];
+  const { data: memberData } = await supabase.from('workspaceMembers').select('workspaceId').eq('userId', userId);
+  if (!memberData || memberData.length === 0) return [];
   
-  const workspaceIds = memberSnapshot.docs.map(doc => doc.data().workspaceId);
-  // Get all those workspaces (in chunks if > 10 in reality, but this is fine for now)
-  const workspaces: Workspace[] = [];
-  for (const wid of workspaceIds) {
-    const wDoc = await getDocs(query(collection(db, 'workspaces'), where('id', '==', wid)));
-    if (!wDoc.empty) {
-      workspaces.push(wDoc.docs[0].data() as Workspace);
-    }
-  }
-  return workspaces;
+  const workspaceIds = memberData.map(d => d.workspaceId);
+  const { data: workspaces } = await supabase.from('workspaces').select('*').in('id', workspaceIds);
+  return (workspaces || []) as Workspace[];
 };
 
 export const getWorkspaceMembers = async (workspaceId: string): Promise<WorkspaceMember[]> => {
-  const q = query(collection(db, 'workspaceMembers'), where('workspaceId', '==', workspaceId));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(d => d.data() as WorkspaceMember);
+  const { data } = await supabase.from('workspaceMembers').select('*').eq('workspaceId', workspaceId);
+  return (data || []) as WorkspaceMember[];
 };
 
 export const getWorkspaceInvites = async (workspaceId: string): Promise<WorkspaceInvite[]> => {
-  const q = query(collection(db, 'workspaceInvites'), where('workspaceId', '==', workspaceId), where('status', '==', 'pending'));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(d => d.data() as WorkspaceInvite);
+  const { data } = await supabase.from('workspaceInvites').select('*').eq('workspaceId', workspaceId).eq('status', 'pending');
+  return (data || []) as WorkspaceInvite[];
 };
 
 export const inviteUserToWorkspace = async (workspaceId: string, email: string, role: Role): Promise<void> => {
-  const newRef = doc(collection(db, 'workspaceInvites'));
-  await setDoc(newRef, {
-    id: newRef.id,
-    workspaceId,
-    email,
-    role,
-    status: 'pending',
-    createdAt: new Date().toISOString()
-  });
+  await supabase.from('workspaceInvites').insert([{
+    workspaceId, email, role, status: 'pending', createdAt: new Date().toISOString()
+  }]);
 };
 
 export const getPendingInvitesForEmail = async (email: string): Promise<WorkspaceInvite[]> => {
-  const q = query(collection(db, 'workspaceInvites'), where('email', '==', email), where('status', '==', 'pending'));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(d => d.data() as WorkspaceInvite);
+  const { data } = await supabase.from('workspaceInvites').select('*').eq('email', email).eq('status', 'pending');
+  return (data || []) as WorkspaceInvite[];
 };
 
 export const acceptInvite = async (invite: WorkspaceInvite, userId: string): Promise<void> => {
-  const memberRef = doc(db, 'workspaceMembers', `${invite.workspaceId}_${userId}`);
-  const newMember: WorkspaceMember = {
-    id: memberRef.id,
+  await supabase.from('workspaceMembers').insert([{
     workspaceId: invite.workspaceId,
     userId,
     email: invite.email,
     role: invite.role,
     joinedAt: new Date().toISOString()
-  };
-  await setDoc(memberRef, newMember);
-  await updateDoc(doc(db, 'workspaceInvites', invite.id), { status: 'accepted' });
+  }]);
+  await supabase.from('workspaceInvites').update({ status: 'accepted' }).eq('id', invite.id);
 };
 
 export const removeMember = async (memberId: string): Promise<void> => {
-  await deleteDoc(doc(db, 'workspaceMembers', memberId));
+  await supabase.from('workspaceMembers').delete().eq('id', memberId);
 };

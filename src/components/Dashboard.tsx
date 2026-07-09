@@ -3,7 +3,7 @@ import { Task, Project } from '../types';
 import { CheckCircle2, Clock, FolderKanban, Cloud } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { exportReportToDrive } from '../lib/workspace';
-import { getAccessToken } from '../lib/firebase';
+import { getAccessToken } from '../lib/supabase';
 import { Calendar } from './Calendar';
 import { WeeklySummary } from './WeeklySummary';
 

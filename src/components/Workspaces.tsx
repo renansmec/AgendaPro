@@ -49,11 +49,11 @@ export const Workspaces: React.FC<WorkspacesProps> = ({ currentWorkspaceId, user
     // user ID is needed... wait, we only have userEmail. Let's get user ID from currentUserMember or pass it.
     // Actually, we don't have userId in props. Let's just pass it or get it from auth.
     // Let's import auth instead
-    const { auth } = await import('../lib/firebase');
-    const user = auth.currentUser;
+    const { supabase } = await import('../lib/supabase');
+    const { data } = await supabase.auth.getSession(); const user = data.session?.user;
     if (!user) return;
     
-    await createWorkspace(newWorkspaceName, user.uid, user.email || '');
+    await createWorkspace(newWorkspaceName, user.id, user.email || '');
     await refreshWorkspaces();
     setNewWorkspaceName('');
     setShowCreateModal(false);

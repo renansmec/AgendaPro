@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createProject, deleteProject, updateProject, createTask, updateTask, deleteTask } from '../lib/api';
 import { Project, Task, ProjectTemplate } from '../types';
-import { getAccessToken, googleSignIn } from '../lib/firebase';
+import { getAccessToken, googleSignIn } from '../lib/supabase';
 import { syncProjectToCalendar, syncTaskToCalendar, deleteEventFromCalendar } from '../lib/workspace';
 import { Trash2, ArrowLeft, Edit2, Check, X, PlusCircle, Lock } from 'lucide-react';
 
