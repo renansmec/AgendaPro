@@ -99,6 +99,11 @@ export default function App() {
     };
     
     loadWorkspaces();
+    window.addEventListener('workspaces_changed', loadWorkspaces);
+    
+    return () => {
+       window.removeEventListener('workspaces_changed', loadWorkspaces);
+    }
   }, [user]);
 
   // 2. Fetch data based on current workspace

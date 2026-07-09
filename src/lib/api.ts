@@ -9,56 +9,86 @@ import { Task, Project, ProjectTemplate, Workspace, WorkspaceMember, WorkspaceIn
 // Our types expect `id` to be string, we can use `uuid` in DB.
 
 export const subscribeToProjectTemplates = (workspaceId: string, callback: (templates: ProjectTemplate[]) => void) => {
-  supabase.from('projectTemplates').select('*').eq('workspaceId', workspaceId).then(({data}) => {
-    if (data) callback(data as ProjectTemplate[]);
-  });
+  const refresh = () => {
+    supabase.from('projectTemplates').select('*').eq('workspaceId', workspaceId).then(({data}) => {
+      if (data) callback(data as ProjectTemplate[]);
+    });
+  };
+  refresh();
+  
   const channel = supabase.channel(`projectTemplates_${workspaceId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'projectTemplates', filter: `workspaceId=eq.${workspaceId}` }, () => {
-       supabase.from('projectTemplates').select('*').eq('workspaceId', workspaceId).then(({data}) => {
-        if (data) callback(data as ProjectTemplate[]);
-      });
+       refresh();
     }).subscribe();
-  return () => { supabase.removeChannel(channel); };
+
+  const handleLocalChange = () => refresh();
+  window.addEventListener('templates_changed', handleLocalChange);
+
+  return () => { 
+    supabase.removeChannel(channel); 
+    window.removeEventListener('templates_changed', handleLocalChange);
+  };
 };
 
 export const createProjectTemplate = async (template: Omit<ProjectTemplate, 'id' | 'createdAt'>): Promise<ProjectTemplate> => {
   const { data, error } = await supabase.from('projectTemplates').insert([{...template, createdAt: new Date().toISOString()}]).select().single();
   if (error) throw error;
+  window.dispatchEvent(new Event('templates_changed'));
   return data as ProjectTemplate;
 };
 
 export const updateProjectTemplate = async (templateId: string, updates: Partial<ProjectTemplate>): Promise<void> => {
   await supabase.from('projectTemplates').update(updates).eq('id', templateId);
+  window.dispatchEvent(new Event('templates_changed'));
 };
 
 export const deleteProjectTemplate = async (templateId: string): Promise<void> => {
   await supabase.from('projectTemplates').delete().eq('id', templateId);
+  window.dispatchEvent(new Event('templates_changed'));
 };
 
 export const subscribeToProjects = (workspaceId: string, callback: (projects: Project[]) => void) => {
-  supabase.from('projects').select('*').eq('workspaceId', workspaceId).then(({data}) => {
-    if (data) callback(data as Project[]);
-  });
+  const refresh = () => {
+    supabase.from('projects').select('*').eq('workspaceId', workspaceId).then(({data}) => {
+      if (data) callback(data as Project[]);
+    });
+  };
+  refresh();
+  
   const channel = supabase.channel(`projects_${workspaceId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'projects', filter: `workspaceId=eq.${workspaceId}` }, () => {
-       supabase.from('projects').select('*').eq('workspaceId', workspaceId).then(({data}) => {
-        if (data) callback(data as Project[]);
-      });
+       refresh();
     }).subscribe();
-  return () => { supabase.removeChannel(channel); };
+
+  const handleLocalChange = () => refresh();
+  window.addEventListener('projects_changed', handleLocalChange);
+
+  return () => { 
+    supabase.removeChannel(channel);
+    window.removeEventListener('projects_changed', handleLocalChange);
+  };
 };
 
 export const subscribeToTasks = (workspaceId: string, callback: (tasks: Task[]) => void) => {
-  supabase.from('tasks').select('*').eq('workspaceId', workspaceId).then(({data}) => {
-    if (data) callback(data as Task[]);
-  });
+  const refresh = () => {
+    supabase.from('tasks').select('*').eq('workspaceId', workspaceId).then(({data}) => {
+      if (data) callback(data as Task[]);
+    });
+  };
+  refresh();
+  
   const channel = supabase.channel(`tasks_${workspaceId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `workspaceId=eq.${workspaceId}` }, () => {
-       supabase.from('tasks').select('*').eq('workspaceId', workspaceId).then(({data}) => {
-        if (data) callback(data as Task[]);
-      });
+       refresh();
     }).subscribe();
-  return () => { supabase.removeChannel(channel); };
+
+  const handleLocalChange = () => refresh();
+  window.addEventListener('tasks_changed', handleLocalChange);
+
+  return () => { 
+    supabase.removeChannel(channel); 
+    window.removeEventListener('tasks_changed', handleLocalChange);
+  };
 };
 
 export const getProjects = async (workspaceId: string): Promise<Project[]> => {
@@ -73,16 +103,20 @@ export const createProject = async (project: Omit<Project, 'id' | 'createdAt' | 
     updatedAt: new Date().toISOString()
   }]).select().single();
   if (error) throw error;
+  window.dispatchEvent(new Event('projects_changed'));
   return data as Project;
 };
 
 export const updateProject = async (projectId: string, updates: Partial<Project>): Promise<void> => {
   await supabase.from('projects').update({ ...updates, updatedAt: new Date().toISOString() }).eq('id', projectId);
+  window.dispatchEvent(new Event('projects_changed'));
 };
 
 export const deleteProject = async (projectId: string, workspaceId: string) => {
   await supabase.from('tasks').delete().eq('projectId', projectId);
   await supabase.from('projects').delete().eq('id', projectId);
+  window.dispatchEvent(new Event('projects_changed'));
+  window.dispatchEvent(new Event('tasks_changed'));
 };
 
 export const getTasks = async (workspaceId: string): Promise<Task[]> => {
@@ -97,15 +131,18 @@ export const createTask = async (task: Omit<Task, 'id' | 'createdAt' | 'updatedA
     updatedAt: new Date().toISOString()
   }]).select().single();
   if (error) throw error;
+  window.dispatchEvent(new Event('tasks_changed'));
   return data as Task;
 };
 
 export const updateTask = async (taskId: string, updates: Partial<Task>): Promise<void> => {
   await supabase.from('tasks').update({ ...updates, updatedAt: new Date().toISOString() }).eq('id', taskId);
+  window.dispatchEvent(new Event('tasks_changed'));
 };
 
 export const deleteTask = async (taskId: string): Promise<void> => {
   await supabase.from('tasks').delete().eq('id', taskId);
+  window.dispatchEvent(new Event('tasks_changed'));
 };
 
 export const createWorkspace = async (name: string, ownerId: string, ownerEmail: string): Promise<Workspace> => {
@@ -113,7 +150,6 @@ export const createWorkspace = async (name: string, ownerId: string, ownerEmail:
     name, ownerId, createdAt: new Date().toISOString()
   }]).select().single();
   if (err1) throw err1;
-
   const { error: err2 } = await supabase.from('workspaceMembers').insert([{
     workspaceId: newWorkspace.id,
     userId: ownerId,
@@ -122,7 +158,18 @@ export const createWorkspace = async (name: string, ownerId: string, ownerEmail:
     joinedAt: new Date().toISOString()
   }]);
   if (err2) throw err2;
+  window.dispatchEvent(new Event('workspaces_changed'));
   return newWorkspace as Workspace;
+};
+
+export const updateWorkspace = async (workspaceId: string, updates: Partial<Workspace>): Promise<void> => {
+  await supabase.from('workspaces').update(updates).eq('id', workspaceId);
+  window.dispatchEvent(new Event('workspaces_changed'));
+};
+
+export const deleteWorkspace = async (workspaceId: string): Promise<void> => {
+  await supabase.from('workspaces').delete().eq('id', workspaceId);
+  window.dispatchEvent(new Event('workspaces_changed'));
 };
 
 export const getWorkspacesForUser = async (userId: string): Promise<Workspace[]> => {

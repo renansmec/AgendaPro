@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Workspace, WorkspaceMember, WorkspaceInvite, Role } from '../types';
-import { createWorkspace, getWorkspaceMembers, getWorkspaceInvites, inviteUserToWorkspace, removeMember } from '../lib/api';
-import { Users, PlusCircle, Trash2, Mail, Shield, ShieldAlert, X } from 'lucide-react';
+import { createWorkspace, getWorkspaceMembers, getWorkspaceInvites, inviteUserToWorkspace, removeMember, updateWorkspace, deleteWorkspace } from '../lib/api';
+import { Users, PlusCircle, Trash2, Mail, Shield, ShieldAlert, X, Edit2 } from 'lucide-react';
 
 interface WorkspacesProps {
   currentWorkspaceId: string;
@@ -23,9 +23,37 @@ export const Workspaces: React.FC<WorkspacesProps> = ({ currentWorkspaceId, user
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<Role>('member');
   
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editWorkspaceName, setEditWorkspaceName] = useState('');
+
   const currentWorkspace = workspaces.find(w => w.id === currentWorkspaceId);
   const currentUserMember = members.find(m => m.email === userEmail);
   const isAdmin = currentUserMember?.role === 'admin' || currentWorkspace?.ownerId === currentUserMember?.userId;
+
+  const handleEditWorkspace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editWorkspaceName.trim() || !currentWorkspace) return;
+    await updateWorkspace(currentWorkspace.id, { name: editWorkspaceName.trim() });
+    await refreshWorkspaces();
+    setShowEditModal(false);
+  };
+
+  const handleDeleteWorkspace = async () => {
+    if (!currentWorkspace) return;
+    if (workspaces.length <= 1) {
+      alert("Você não pode excluir seu único ambiente de trabalho.");
+      return;
+    }
+    const confirmDelete = window.confirm(`Tem certeza que deseja excluir o ambiente "${currentWorkspace.name}"?\nIsso apagará todos os projetos e tarefas e não pode ser desfeito.`);
+    if (!confirmDelete) return;
+    
+    await deleteWorkspace(currentWorkspace.id);
+    const nextWorkspace = workspaces.find(w => w.id !== currentWorkspace.id);
+    if (nextWorkspace) {
+      onWorkspaceChange(nextWorkspace.id);
+    }
+    await refreshWorkspaces();
+  };
 
   const loadData = async () => {
     if (!currentWorkspaceId) return;
@@ -105,20 +133,34 @@ export const Workspaces: React.FC<WorkspacesProps> = ({ currentWorkspaceId, user
 
         {/* Current Workspace Details */}
         <div className="md:col-span-2 bg-white border border-slate-200 rounded-xl p-4 flex flex-col">
-          <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 border-b border-slate-100 pb-4 gap-4">
             <div>
-              <h2 className="text-xl font-bold text-slate-800">{currentWorkspace.name}</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-slate-800">{currentWorkspace.name}</h2>
+                {isAdmin && (
+                  <button onClick={() => {
+                    setEditWorkspaceName(currentWorkspace.name);
+                    setShowEditModal(true);
+                  }} className="text-slate-400 hover:text-indigo-600 transition-colors">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
               <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
                 <Shield className="w-3 h-3" /> {isAdmin ? 'Você é um Administrador' : 'Você é um Membro'}
               </div>
             </div>
             {isAdmin && (
-              <button onClick={() => setShowInviteModal(true)} className="bg-slate-900 text-white px-4 py-2 rounded text-sm font-medium hover:bg-slate-800 transition-colors flex items-center gap-2">
-                <Mail className="w-4 h-4" /> Convidar Membro
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowInviteModal(true)} className="bg-slate-900 text-white px-4 py-2 rounded text-sm font-medium hover:bg-slate-800 transition-colors flex items-center gap-2">
+                  <Mail className="w-4 h-4" /> Convidar
+                </button>
+                <button onClick={handleDeleteWorkspace} className="bg-red-50 text-red-600 px-4 py-2 rounded text-sm font-medium hover:bg-red-100 transition-colors flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" /> Excluir
+                </button>
+              </div>
             )}
           </div>
-
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">Membros do Ambiente</h4>
           
           {loading ? (
@@ -233,6 +275,38 @@ export const Workspaces: React.FC<WorkspacesProps> = ({ currentWorkspaceId, user
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setShowInviteModal(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Cancelar</button>
                 <button type="submit" disabled={!inviteEmail.trim()} className="px-6 py-2 bg-slate-900 text-white rounded text-sm font-medium hover:bg-slate-800 disabled:opacity-50">Enviar Convite</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Edit Workspace Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-bold text-slate-800">Editar Ambiente</h3>
+              <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleEditWorkspace} className="flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Nome do Ambiente</label>
+                <input
+                  type="text"
+                  value={editWorkspaceName}
+                  onChange={e => setEditWorkspaceName(e.target.value)}
+                  placeholder="Ex: Empresa X..."
+                  className="w-full px-4 py-2 bg-slate-100 border-none rounded focus:ring-1 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+              
+              <div className="flex justify-end gap-3 mt-4">
+                <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Cancelar</button>
+                <button type="submit" disabled={!editWorkspaceName.trim()} className="px-6 py-2 bg-indigo-600 text-white rounded text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">Salvar</button>
               </div>
             </form>
           </div>
