@@ -343,9 +343,9 @@ export const Projects: React.FC<ProjectsProps> = ({ workspaceId, projects, tasks
   return (
     <div className="flex flex-col gap-4 max-w-5xl mx-auto h-full">
       <div className="flex items-center justify-between shrink-0 mb-2">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">Meus Projetos</h3>
+        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">Meus projetos</h3>
         <button onClick={() => setShowCreateProjectModal(true)} className="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2">
-          <PlusCircle className="w-4 h-4" /> Novo Projeto
+          <PlusCircle className="w-4 h-4" /> Novo projeto
         </button>
       </div>
 
@@ -353,7 +353,7 @@ export const Projects: React.FC<ProjectsProps> = ({ workspaceId, projects, tasks
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-slate-800">Novo Projeto</h3>
+              <h3 className="text-lg font-bold text-slate-800">Novo projeto</h3>
               <button onClick={() => setShowCreateProjectModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
