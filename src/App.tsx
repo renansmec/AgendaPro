@@ -3,22 +3,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CheckCircle2, LogOut, Copy, Menu, X, LayoutDashboard, FolderKanban, ListTodo, CalendarDays, Users } from 'lucide-react';
+import { CheckCircle2, LogOut, Copy, Menu, X, LayoutDashboard, FolderKanban, ListTodo, CalendarDays, Users, ClipboardList } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { initAuth, googleSignIn, logout } from './lib/supabase';
-import { subscribeToProjects, subscribeToTasks, subscribeToProjectTemplates, getWorkspacesForUser, createWorkspace, getPendingInvitesForEmail, acceptInvite } from './lib/api';
-import { Workspace, WorkspaceInvite } from './types';
+import { subscribeToProjects, subscribeToTasks, subscribeToProjectTemplates, getWorkspacesForUser, createWorkspace, getPendingInvitesForEmail, acceptInvite, subscribeToAuditLogs } from './lib/api';
+import { Workspace, WorkspaceInvite, AuditLogEntry } from './types';
 import { Workspaces } from './components/Workspaces';
 import { User } from '@supabase/supabase-js';
 import { Dashboard } from './components/Dashboard';
 import { Projects } from './components/Projects';
 import { Tasks } from './components/Tasks';
 import { Templates } from './components/Templates';
+import { AuditLog } from './components/AuditLog';
 import { TaskNotifications } from './components/TaskNotifications';
 import { Task, Project, ProjectTemplate } from './types';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'tasks' | 'templates' | 'workspaces'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'tasks' | 'templates' | 'workspaces' | 'audit'>('dashboard');
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
@@ -26,6 +27,7 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
   const [pendingInvites, setPendingInvites] = useState<WorkspaceInvite[]>([]);
@@ -141,6 +143,9 @@ export default function App() {
       templatesLoaded = true;
       checkLoading();
     });
+    const unsubAudit = subscribeToAuditLogs(currentWorkspaceId, (logs) => {
+      setAuditLogs(logs);
+    });
     
     // Safety timeout in case subscriptions fail silently or are rejected by rules
     const timeout = setTimeout(() => {
@@ -153,6 +158,7 @@ export default function App() {
       unsubTasks();
       unsubProjects();
       unsubTemplates();
+      unsubAudit();
     };
   }, [currentWorkspaceId, workspaceLoading]);
 
@@ -265,6 +271,17 @@ export default function App() {
             <Users className={`shrink-0 w-5 h-5 ${activeTab === 'workspaces' ? 'text-white' : 'text-slate-500'}`} />
             {isSidebarOpen && <span>Ambientes</span>}
           </button>
+          
+          <button
+            onClick={() => setActiveTab('audit')}
+            title="Auditoria"
+            className={`w-full flex items-center ${isSidebarOpen ? 'gap-3 px-3' : 'justify-center'} py-2 rounded text-sm transition-colors ${
+              activeTab === 'audit' ? 'bg-indigo-600 text-white font-medium' : 'hover:bg-slate-800 opacity-80'
+            }`}
+          >
+            <ClipboardList className={`shrink-0 w-5 h-5 ${activeTab === 'audit' ? 'text-white' : 'text-slate-500'}`} />
+            {isSidebarOpen && <span>Auditoria</span>}
+          </button>
         </nav>
 
         <div className={`mt-auto ${isSidebarOpen ? 'p-4' : 'p-2'} border-t border-slate-800 flex flex-col`}>
@@ -364,6 +381,9 @@ export default function App() {
               </div>
               <div className={activeTab === 'templates' ? 'block h-full' : 'hidden'}>
                 <Templates workspaceId={currentWorkspaceId!} templates={templates} />
+              </div>
+              <div className={activeTab === 'audit' ? 'block h-full' : 'hidden'}>
+                <AuditLog auditLogs={auditLogs} />
               </div>
             <div className={activeTab === 'workspaces' ? 'block h-full' : 'hidden'}>
                 {currentWorkspaceId && <Workspaces currentWorkspaceId={currentWorkspaceId} userEmail={user.email!} onWorkspaceChange={setCurrentWorkspaceId} workspaces={workspaces} refreshWorkspaces={async () => { const w = await getWorkspacesForUser(user.id); setWorkspaces(w); }} />}

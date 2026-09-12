@@ -91,6 +91,46 @@ export const subscribeToTasks = (workspaceId: string, callback: (tasks: Task[]) 
   };
 };
 
+export const logAudit = async (workspaceId: string, entityType: 'project' | 'task', action: 'created' | 'updated' | 'deleted', title: string, projectName?: string | null, details?: string | null) => {
+  try {
+    await supabase.from('auditLogs').insert([{
+      workspaceId,
+      entityType,
+      action,
+      title,
+      projectName,
+      details,
+      createdAt: new Date().toISOString()
+    }]);
+    window.dispatchEvent(new Event('auditLogs_changed'));
+  } catch (error) {
+    console.error('Audit log failed. Table might not exist yet:', error);
+  }
+};
+
+export const subscribeToAuditLogs = (workspaceId: string, callback: (logs: any[]) => void) => {
+  const refresh = async () => {
+    const { data, error } = await supabase.from('auditLogs').select('*').eq('workspaceId', workspaceId).order('createdAt', { ascending: false });
+    if (!error && data) {
+      callback(data);
+    }
+  };
+  refresh();
+  
+  const channel = supabase.channel(`auditLogs_${workspaceId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'auditLogs', filter: `workspaceId=eq.${workspaceId}` }, () => {
+       refresh();
+    }).subscribe();
+
+  const handleLocalChange = () => refresh();
+  window.addEventListener('auditLogs_changed', handleLocalChange);
+
+  return () => { 
+    supabase.removeChannel(channel);
+    window.removeEventListener('auditLogs_changed', handleLocalChange);
+  };
+};
+
 export const getProjects = async (workspaceId: string): Promise<Project[]> => {
   const { data } = await supabase.from('projects').select('*').eq('workspaceId', workspaceId);
   return (data || []) as Project[];
@@ -104,19 +144,39 @@ export const createProject = async (project: Omit<Project, 'id' | 'createdAt' | 
   }]).select().single();
   if (error) throw error;
   window.dispatchEvent(new Event('projects_changed'));
+  await logAudit(project.workspaceId, 'project', 'created', project.name);
   return data as Project;
 };
 
 export const updateProject = async (projectId: string, updates: Partial<Project>): Promise<void> => {
+  const { data: oldProject } = await supabase.from('projects').select('*').eq('id', projectId).single();
   await supabase.from('projects').update({ ...updates, updatedAt: new Date().toISOString() }).eq('id', projectId);
   window.dispatchEvent(new Event('projects_changed'));
+  if (oldProject) {
+    const changes: string[] = [];
+    if (updates.name && updates.name !== oldProject.name) changes.push(`Nome alterado de "${oldProject.name}" para "${updates.name}"`);
+    if (updates.description !== undefined && updates.description !== oldProject.description) changes.push(`Descrição alterada`);
+    if (updates.dueDate !== undefined && updates.dueDate !== oldProject.dueDate) {
+       const oldDate = oldProject.dueDate ? new Date(oldProject.dueDate).toLocaleDateString('pt-BR') : 'sem prazo';
+       const newDate = updates.dueDate ? new Date(updates.dueDate).toLocaleDateString('pt-BR') : 'sem prazo';
+       changes.push(`Prazo alterado de ${oldDate} para ${newDate}`);
+    }
+    if (updates.isSequential !== undefined && updates.isSequential !== oldProject.isSequential) changes.push(`Sequencial alterado para ${updates.isSequential ? 'Sim' : 'Não'}`);
+    
+    const details = changes.length > 0 ? changes.join('; ') : null;
+    await logAudit(oldProject.workspaceId, 'project', 'updated', updates.name || oldProject.name, null, details);
+  }
 };
 
 export const deleteProject = async (projectId: string, workspaceId: string) => {
+  const { data: oldProject } = await supabase.from('projects').select('*').eq('id', projectId).single();
   await supabase.from('tasks').delete().eq('projectId', projectId);
   await supabase.from('projects').delete().eq('id', projectId);
   window.dispatchEvent(new Event('projects_changed'));
   window.dispatchEvent(new Event('tasks_changed'));
+  if (oldProject) {
+    await logAudit(workspaceId, 'project', 'deleted', oldProject.name);
+  }
 };
 
 export const getTasks = async (workspaceId: string): Promise<Task[]> => {
@@ -132,17 +192,65 @@ export const createTask = async (task: Omit<Task, 'id' | 'createdAt' | 'updatedA
   }]).select().single();
   if (error) throw error;
   window.dispatchEvent(new Event('tasks_changed'));
+  
+  let projectName = null;
+  if (task.projectId) {
+    const { data: proj } = await supabase.from('projects').select('name').eq('id', task.projectId).single();
+    if (proj) projectName = proj.name;
+  }
+  await logAudit(task.workspaceId, 'task', 'created', task.title, projectName);
+  
   return data as Task;
 };
 
 export const updateTask = async (taskId: string, updates: Partial<Task>): Promise<void> => {
+  const { data: oldTask } = await supabase.from('tasks').select('*').eq('id', taskId).single();
   await supabase.from('tasks').update({ ...updates, updatedAt: new Date().toISOString() }).eq('id', taskId);
   window.dispatchEvent(new Event('tasks_changed'));
+  
+  if (oldTask) {
+    let projectName = null;
+    const currentProjectId = updates.projectId !== undefined ? updates.projectId : oldTask.projectId;
+    if (currentProjectId) {
+      const { data: proj } = await supabase.from('projects').select('name').eq('id', currentProjectId).single();
+      if (proj) projectName = proj.name;
+    }
+    
+    const changes: string[] = [];
+    if (updates.title && updates.title !== oldTask.title) changes.push(`Título alterado de "${oldTask.title}" para "${updates.title}"`);
+    if (updates.description !== undefined && updates.description !== oldTask.description) changes.push(`Descrição alterada`);
+    if (updates.status && updates.status !== oldTask.status) {
+       const statusMap: Record<string, string> = { 'todo': 'A Fazer', 'in-progress': 'Em Andamento', 'done': 'Concluído' };
+       changes.push(`Status alterado de "${statusMap[oldTask.status] || oldTask.status}" para "${statusMap[updates.status] || updates.status}"`);
+    }
+    if (updates.priority && updates.priority !== oldTask.priority) {
+       const priorityMap: Record<string, string> = { 'low': 'Baixa', 'medium': 'Média', 'high': 'Alta' };
+       changes.push(`Prioridade alterada de "${priorityMap[oldTask.priority] || oldTask.priority}" para "${priorityMap[updates.priority] || updates.priority}"`);
+    }
+    if (updates.dueDate !== undefined && updates.dueDate !== oldTask.dueDate) {
+       const oldDate = oldTask.dueDate ? new Date(oldTask.dueDate).toLocaleDateString('pt-BR') : 'sem prazo';
+       const newDate = updates.dueDate ? new Date(updates.dueDate).toLocaleDateString('pt-BR') : 'sem prazo';
+       changes.push(`Prazo alterado de ${oldDate} para ${newDate}`);
+    }
+
+    const details = changes.length > 0 ? changes.join('; ') : null;
+    await logAudit(oldTask.workspaceId, 'task', 'updated', updates.title || oldTask.title, projectName, details);
+  }
 };
 
 export const deleteTask = async (taskId: string): Promise<void> => {
+  const { data: oldTask } = await supabase.from('tasks').select('*').eq('id', taskId).single();
   await supabase.from('tasks').delete().eq('id', taskId);
   window.dispatchEvent(new Event('tasks_changed'));
+  
+  if (oldTask) {
+    let projectName = null;
+    if (oldTask.projectId) {
+      const { data: proj } = await supabase.from('projects').select('name').eq('id', oldTask.projectId).single();
+      if (proj) projectName = proj.name;
+    }
+    await logAudit(oldTask.workspaceId, 'task', 'deleted', oldTask.title, projectName);
+  }
 };
 
 export const createWorkspace = async (name: string, ownerId: string, ownerEmail: string): Promise<Workspace> => {

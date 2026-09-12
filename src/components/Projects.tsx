@@ -3,7 +3,7 @@ import { createProject, deleteProject, updateProject, createTask, updateTask, de
 import { Project, Task, ProjectTemplate } from '../types';
 import { getAccessToken, googleSignIn } from '../lib/supabase';
 import { syncProjectToCalendar, syncTaskToCalendar, deleteEventFromCalendar } from '../lib/workspace';
-import { Trash2, ArrowLeft, Edit2, Check, X, PlusCircle, Lock } from 'lucide-react';
+import { Trash2, ArrowLeft, Edit2, Check, X, PlusCircle, Lock, CalendarDays } from 'lucide-react';
 
 interface ProjectsProps {
   workspaceId: string;
@@ -25,6 +25,7 @@ export const Projects: React.FC<ProjectsProps> = ({ workspaceId, projects, tasks
   const [editProjectName, setEditProjectName] = useState('');
   const [editProjectDesc, setEditProjectDesc] = useState('');
   const [editProjectSequential, setEditProjectSequential] = useState(false);
+  const [editProjectDueDate, setEditProjectDueDate] = useState('');
 
   // Delete confirmation state
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -112,7 +113,12 @@ export const Projects: React.FC<ProjectsProps> = ({ workspaceId, projects, tasks
   const handleSaveEditProject = async (projectId: string) => {
     if (!editProjectName.trim()) return;
     try {
-      await updateProject(projectId, { name: editProjectName, description: editProjectDesc, isSequential: editProjectSequential });
+      await updateProject(projectId, { 
+        name: editProjectName, 
+        description: editProjectDesc, 
+        isSequential: editProjectSequential,
+        dueDate: editProjectDueDate ? editProjectDueDate + 'T12:00:00' : null 
+      });
       setEditingProjectId(null);
     } catch (err) {
       if (err && err.message && (err.message.includes('aborted') || err.message.includes('popup'))) { console.warn('User aborted'); } else { console.error(err); }
@@ -201,6 +207,15 @@ export const Projects: React.FC<ProjectsProps> = ({ workspaceId, projects, tasks
                     onChange={(e) => setEditProjectDesc(e.target.value)}
                     className="w-full px-2 py-1 mb-2 bg-white border border-slate-200 rounded text-[10px] min-h-[40px] focus:outline-none focus:border-indigo-500 resize-none"
                   />
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] text-slate-500 font-medium">Prazo:</span>
+                    <input
+                      type="date"
+                      value={editProjectDueDate}
+                      onChange={(e) => setEditProjectDueDate(e.target.value)}
+                      className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleSaveEditProject(selectedProject.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded bg-white border border-slate-200">
                       <Check className="w-4 h-4" />
@@ -223,6 +238,7 @@ export const Projects: React.FC<ProjectsProps> = ({ workspaceId, projects, tasks
                     setEditingProjectId(selectedProject.id);
                     setEditProjectName(selectedProject.name);
                     setEditProjectDesc(selectedProject.description || '');
+                    setEditProjectDueDate(selectedProject.dueDate ? selectedProject.dueDate.split('T')[0] : '');
                   }}
                   className="p-1 text-slate-400 hover:text-indigo-600 rounded bg-white border border-slate-200 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
@@ -340,6 +356,15 @@ export const Projects: React.FC<ProjectsProps> = ({ workspaceId, projects, tasks
     );
   }
 
+  const sortedProjects = [...projects].sort((a, b) => {
+    if (a.dueDate && b.dueDate) {
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    }
+    if (a.dueDate) return -1;
+    if (b.dueDate) return 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
   return (
     <div className="flex flex-col gap-4 max-w-5xl mx-auto h-full">
       <div className="flex items-center justify-between shrink-0 mb-2">
@@ -441,7 +466,7 @@ export const Projects: React.FC<ProjectsProps> = ({ workspaceId, projects, tasks
             <div className="col-span-full p-8 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50 rounded-lg border border-slate-100 border-dashed">
               Nenhum projeto encontrado.
             </div>
-          ) : projects.map((project) => {
+          ) : sortedProjects.map((project) => {
             const projectTasks = tasks.filter(t => t.projectId === project.id);
             const totalCount = projectTasks.length;
             const doneCount = projectTasks.filter(t => t.status === 'done').length;
@@ -458,6 +483,7 @@ export const Projects: React.FC<ProjectsProps> = ({ workspaceId, projects, tasks
                       setEditingProjectId(project.id);
                       setEditProjectName(project.name);
                       setEditProjectDesc(project.description || '');
+                      setEditProjectDueDate(project.dueDate ? project.dueDate.split('T')[0] : '');
                     }}
                     className="p-1 text-slate-400 hover:text-indigo-600 rounded bg-white border border-slate-200"
                   >
@@ -487,8 +513,17 @@ export const Projects: React.FC<ProjectsProps> = ({ workspaceId, projects, tasks
                   <textarea
                     value={editProjectDesc}
                     onChange={(e) => setEditProjectDesc(e.target.value)}
-                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-[10px] min-h-[40px] focus:outline-none focus:border-indigo-500 resize-none"
+                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-[10px] min-h-[40px] focus:outline-none focus:border-indigo-500 resize-none mb-2"
                   />
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] text-slate-500 font-medium">Prazo:</span>
+                    <input
+                      type="date"
+                      value={editProjectDueDate}
+                      onChange={(e) => setEditProjectDueDate(e.target.value)}
+                      className="px-2 py-1 flex-1 bg-white border border-slate-200 rounded text-[10px] focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => handleSaveEditProject(project.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded bg-white border border-slate-200">
                       <Check className="w-3 h-3" />
@@ -509,6 +544,20 @@ export const Projects: React.FC<ProjectsProps> = ({ workspaceId, projects, tasks
                       Sequencial
                     </div>
                   )}
+                  <div className="flex flex-col gap-1 mb-3 text-[9px] text-slate-500 bg-slate-50/50 p-2 rounded border border-slate-100">
+                    <div className="flex items-center gap-1.5">
+                      <CalendarDays className="w-3 h-3 text-slate-400" />
+                      <span className="font-medium text-slate-400">Criado em:</span>
+                      <span>{new Date(project.createdAt).toLocaleDateString('pt-BR')}</span>
+                    </div>
+                    {project.dueDate && (
+                      <div className="flex items-center gap-1.5">
+                        <CalendarDays className="w-3 h-3 text-indigo-400" />
+                        <span className="font-medium text-slate-400">Prazo:</span>
+                        <span className="text-indigo-600 font-medium">{new Date(project.dueDate).toLocaleDateString('pt-BR')}</span>
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
               

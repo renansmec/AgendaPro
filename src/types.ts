@@ -73,3 +73,14 @@ export interface WorkspaceInvite {
   status: 'pending' | 'accepted';
   createdAt: string;
 }
+
+export interface AuditLogEntry {
+  id: string;
+  workspaceId: string;
+  entityType: 'project' | 'task';
+  action: 'created' | 'updated' | 'deleted';
+  title: string;
+  projectName?: string | null;
+  details?: string | null;
+  createdAt: string;
+}
